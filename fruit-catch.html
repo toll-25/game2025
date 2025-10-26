@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>フルーツキャッチゲーム (デフォルトカーソル)</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            margin-top: 20px;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            display: block;
+            background-color: #87ceeb; /* 空の背景色 */
+            border: 5px solid #333;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <h1>キャッチ・ザ・フルーツ！(マウスで操作)</h1>
+    <p>マウスカーソル（矢印）を左右に動かして籠を操作してください。</p>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // =======================================================
+        //  ゲーム設定
+        // =======================================================
+        const BASKET_WIDTH = 80;
+        const BASKET_HEIGHT = 20;
+        const FRUIT_RADIUS = 15;
+        const FRUIT_FALL_SPEED_BASE = 1.5;
+        //  修正箇所: 1500ミリ秒 (1.5秒) に変更し、頻度を下げました。
+        const FRUIT_SPAWN_INTERVAL = 1500; 
+
+        let score = 0;
+        let gameOver = false;
+        let lastSpawnTime = 0;
+        
+        let targetX = canvas.width / 2 - BASKET_WIDTH / 2;
+        let mouseX = canvas.width / 2;
+
+        // =======================================================
+        //  籠 (プレイヤー) オブジェクト
+        // =======================================================
+        const basket = {
+            x: canvas.width / 2 - BASKET_WIDTH / 2,
+            y: canvas.height - 30,
+            width: BASKET_WIDTH,
+            height: BASKET_HEIGHT,
+            color: 'brown',
+            
+            draw() {
+                // 籠の本体
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                // 持ち手 (少し装飾)
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(this.x + this.width / 4, this.y - 5, this.width / 2, 5);
+            },
+
+            update() {
+                const easingFactor = 0.2;
+                this.x += (targetX - this.x) * easingFactor;
+
+                if (this.x < 0) {
+                    this.x = 0;
+                }
+                if (this.x > canvas.width - this.width) {
+                    this.x = canvas.width - this.width;
+                }
+            }
+        };
+
+        // =======================================================
+        //  果物 (落下物) 配列
+        // =======================================================
+        const FRUIT_TYPES = [
+            { name: 'apple', color: 'red', speedMultiplier: 1.0 },
+            { name: 'banana', color: 'yellow', speedMultiplier: 1.2 },
+            { name: 'orange', color: 'orange', speedMultiplier: 0.8 }
+        ];
+
+        let fruits = [];
+
+        function createFruit() {
+            const type = FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
+            const x = Math.random() * (canvas.width - FRUIT_RADIUS * 2) + FRUIT_RADIUS;
+            const speed = FRUIT_FALL_SPEED_BASE * type.speedMultiplier + Math.random() * 1;
+            fruits.push({
+                x: x,
+                y: -FRUIT_RADIUS,
+                radius: FRUIT_RADIUS,
+                type: type,
+                speed: speed
+            });
+        }
+
+        function drawFruit(fruit) {
+            ctx.fillStyle = fruit.type.color;
+            ctx.beginPath();
+            ctx.arc(fruit.x, fruit.y, fruit.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 果物の簡易的な装飾 (葉っぱやヘタ)
+            if (fruit.type.name === 'apple') {
+                ctx.fillStyle = 'darkgreen';
+                ctx.fillRect(fruit.x - 3, fruit.y - fruit.radius - 5, 6, 5);
+            } else if (fruit.type.name === 'banana') {
+                ctx.fillStyle = '#ccaa00';
+                ctx.beginPath();
+                ctx.arc(fruit.x - fruit.radius * 0.8, fruit.y - fruit.radius * 0.5, fruit.radius * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (fruit.type.name === 'orange') {
+                 ctx.fillStyle = 'darkgreen';
+                ctx.beginPath();
+                ctx.moveTo(fruit.x, fruit.y - fruit.radius);
+                ctx.lineTo(fruit.x + 5, fruit.y - fruit.radius - 5);
+                ctx.lineTo(fruit.x + 2, fruit.y - fruit.radius - 8);
+                ctx.fill();
+            }
+        }
+
+        function updateFruits() {
+            for (let i = fruits.length - 1; i >= 0; i--) {
+                const fruit = fruits[i];
+                fruit.y += fruit.speed;
+
+                // 衝突判定: 果物が籠に落ちたか
+                if (fruit.y + fruit.radius >= basket.y && 
+                    fruit.y - fruit.radius <= basket.y + basket.height && 
+                    fruit.x >= basket.x && 
+                    fruit.x <= basket.x + basket.width) {
+                    
+                    score++;
+                    fruits.splice(i, 1);
+                    console.log("Fruit caught! Score: " + score); 
+                    continue; 
+                }
+
+                // 画面下部に到達したか (キャッチ失敗)
+                if (fruit.y > canvas.height + fruit.radius) {
+                    gameOver = true;
+                    break;
+                }
+            }
+        }
+
+        // =======================================================
+        //  入力処理 (マウスイベント)
+        // =======================================================
+        canvas.addEventListener('mousemove', (event) => {
+            if (gameOver) return;
+
+            const rect = canvas.getBoundingClientRect();
+            mouseX = event.clientX - rect.left; 
+            targetX = mouseX - basket.width / 2; 
+        });
+        
+        // リスタート処理はクリックイベント
+        document.addEventListener('click', () => {
+             if (gameOver) {
+                resetGame();
+            }
+        });
+
+        // =======================================================
+        //  描画と表示
+        // =======================================================
+        function drawScore() {
+            ctx.fillStyle = '#333';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`スコア: ${score}`, 10, 30);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ゲームオーバー！', canvas.width / 2, canvas.height / 2 - 20);
+            
+            ctx.font = '20px Arial';
+            ctx.fillText(`最終スコア: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
+            ctx.fillText('クリックしてリスタート', canvas.width / 2, canvas.height / 2 + 70);
+        }
+
+        // =======================================================
+        //  ゲームループ
+        // =======================================================
+        function gameLoop(timestamp) {
+            if (gameOver) {
+                drawGameOver();
+                return;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            //  修正箇所: 1.5秒ごとに果物を生成
+            if (timestamp - lastSpawnTime > FRUIT_SPAWN_INTERVAL) {
+                createFruit();
+                lastSpawnTime = timestamp;
+            }
+
+            basket.update();
+            updateFruits();
+
+            basket.draw();
+            fruits.forEach(drawFruit);
+            drawScore();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // =======================================================
+        //  ゲームリセット
+        // =======================================================
+        function resetGame() {
+            score = 0;
+            fruits = [];
+            gameOver = false;
+            basket.x = canvas.width / 2 - BASKET_WIDTH / 2;
+            targetX = basket.x; 
+            lastSpawnTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ゲームスタート
+        resetGame();
+
+    </script>
+</body>
+</html>
